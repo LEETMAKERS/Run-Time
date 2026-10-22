@@ -4,10 +4,10 @@
 #include "game_rules.h"
 
 namespace hardware {
-constexpr uint8_t colourPins[] = {2, 3, 4, 7};
-constexpr uint8_t startPin = 5;
-constexpr uint8_t modePin = 6;
-constexpr unsigned long baudRate = 9600;
+constexpr uint8_t colourPins[] = {25, 26, 27, 32};
+constexpr uint8_t startPin = 22;
+constexpr uint8_t modePin = 21;
+constexpr unsigned long baudRate = 115200;
 
 inline const __FlashStringHelper* colourName(uint8_t colour) {
   switch (colour) {

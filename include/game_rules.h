@@ -4,31 +4,87 @@
 
 namespace game {
 constexpr uint8_t colourCount = 4;
-constexpr uint8_t maxLevel = 40;
-constexpr uint8_t memoryLives = 3;
+constexpr uint8_t maxMemoryLevel = 10;
+constexpr uint8_t maxWordLevel = 10;
+enum class Mode : uint8_t { Memory, Speed, Word };
+inline Mode nextMode(Mode mode) {
+  return static_cast<Mode>((static_cast<uint8_t>(mode) + 1) % 3);
+}
+constexpr uint16_t memoryWatchPauseMs = 700;
+constexpr uint16_t memoryCelebrationMs = 350;
 constexpr uint32_t speedDurationMs = 15000;
 constexpr uint32_t debounceMs = 25;
 
-inline uint8_t sequenceLength(uint8_t level) { return level + 2; }
-inline uint16_t boundedTime(uint8_t level, uint16_t initial,
+inline uint32_t sequenceLength(uint32_t level) { return level; }
+
+// A seeded stream replays a round, allowing at most two identical colors in a row.
+class Sequence {
+ public:
+  explicit Sequence(uint32_t seed) : state_(seed ? seed : 1) {}
+  uint8_t next() {
+    state_ ^= state_ << 13;
+    state_ ^= state_ >> 17;
+    state_ ^= state_ << 5;
+    uint8_t colour = state_ % colourCount;
+    if (colour == previous_ && repeats_ == 2) {
+      // Pick one of the other three colors without an unbounded retry loop.
+      colour = (previous_ + 1 + (state_ / colourCount) % (colourCount - 1)) % colourCount;
+    }
+    repeats_ = colour == previous_ ? repeats_ + 1 : 1;
+    previous_ = colour;
+    return colour;
+  }
+ private:
+  uint32_t state_;
+  uint8_t previous_ = colourCount;
+  uint8_t repeats_ = 0;
+};
+inline uint16_t boundedTime(uint32_t level, uint16_t initial,
                             uint16_t decrease, uint16_t minimum) {
-  const int32_t value = initial - static_cast<int32_t>(level - 1) * decrease;
+  const int64_t value = initial - static_cast<int64_t>(level - 1) * decrease;
   return value < minimum ? minimum : static_cast<uint16_t>(value);
 }
-inline uint16_t showTime(uint8_t level) {
-  return boundedTime(level, 1000, 20, 220);
+inline uint16_t wordShowTime(uint32_t level) {
+  return boundedTime(level, 600, 40, 240);
 }
-inline uint16_t answerTime(uint8_t level) {
+inline uint16_t wordAnswerTime(uint32_t level) {
+  return boundedTime(level, 2500, 175, 1000);
+}
+inline uint16_t showTime(uint32_t level) {
+  return boundedTime(level, 650, 30, 220);
+}
+inline uint16_t answerTime(uint32_t level) {
   return boundedTime(level, 4000, 75, 1075);
 }
-inline uint16_t gapTime(uint8_t level) {
-  return boundedTime(level, 300, 5, 105);
+inline uint16_t gapTime(uint32_t level) {
+  return boundedTime(level, 180, 8, 105);
 }
 
 // Unsigned subtraction keeps timers correct across millis() rollover.
 inline bool elapsed(uint32_t now, uint32_t since, uint32_t duration) {
   return static_cast<uint32_t>(now - since) >= duration;
 }
+
+// Menu-only secret: Blue, Green, Brown, Green, Blue. Release between steps.
+class CheatCode {
+ public:
+  void reset() { step_ = 0; }
+  bool enter(int8_t colour, uint32_t now) {
+    if (colour == -1) return false; // No new gesture.
+    if (step_ && elapsed(now, lastAt_, 3000)) reset();
+    lastAt_ = now;
+    const int8_t code[] = {1, 2, 3, 2, 1};
+    if (colour != code[step_]) {
+      step_ = colour == code[0] ? 1 : 0;
+      return false;
+    }
+    if (++step_ == 5) { reset(); return true; }
+    return false;
+  }
+ private:
+  uint8_t step_ = 0;
+  uint32_t lastAt_ = 0;
+};
 
 class Button {
  public:
